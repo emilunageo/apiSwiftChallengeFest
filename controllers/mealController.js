@@ -32,10 +32,20 @@ const createMealEntry = async (req, res) => {
     // Populate nutritional info for items that reference foods
     const populatedItems = await Promise.all(
       items.map(async (item) => {
+        // Set default values for missing fields
+        if (!item.source) {
+          item.source = 'manual_entry';
+        }
+        if (!item.portion) {
+          item.portion = { amount: 100, unit: 'grams' };
+        } else if (!item.portion.amount) {
+          item.portion.amount = 100;
+        }
+
         if (item.foodId) {
           const food = await Food.findById(item.foodId);
           if (food) {
-            const portionMultiplier = item.portion.amount / 100; // Assuming base is per 100g
+            const portionMultiplier = (item.portion?.amount || 100) / 100; // Assuming base is per 100g
             item.nutritionalInfo = {
               calories: Math.round((food.calorias_por_100g || 0) * portionMultiplier),
               carbohydrates: Math.round((food.carbohidratos_totales || 0) * portionMultiplier),

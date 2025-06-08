@@ -13,8 +13,9 @@ const mealItemSchema = new mongoose.Schema({
   portion: {
     amount: {
       type: Number,
-      required: true,
-      min: 0
+      required: false,
+      min: 0,
+      default: 100
     },
     unit: {
       type: String,
@@ -34,7 +35,8 @@ const mealItemSchema = new mongoose.Schema({
   source: {
     type: String,
     enum: ['photo_detection', 'manual_entry', 'text_scan', 'database_search'],
-    required: true
+    required: false,
+    default: 'manual_entry'
   },
   confidence: {
     type: Number,
