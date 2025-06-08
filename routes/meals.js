@@ -5,7 +5,8 @@ const {
   getMealEntry,
   updateMealEntry,
   addGlucoseToMeal,
-  deleteMealEntry
+  deleteMealEntry,
+  analyzeMealWithOpenAI
 } = require('../controllers/mealController');
 const { auth } = require('../middleware/auth');
 
@@ -35,6 +36,11 @@ router.put('/:id', auth, updateMealEntry);
 // @desc    Add glucose reading to meal
 // @access  Private
 router.post('/:id/glucose', auth, addGlucoseToMeal);
+
+// @route   POST /api/meals/:id/analyze
+// @desc    Trigger OpenAI analysis for existing meal
+// @access  Public
+router.post('/:id/analyze', analyzeMealWithOpenAI);
 
 // @route   DELETE /api/meals/:id
 // @desc    Delete meal entry (soft delete)

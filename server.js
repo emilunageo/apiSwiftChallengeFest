@@ -33,6 +33,7 @@ app.use('/api/messages', require('./routes/messages'));
 app.use('/api/glucose', require('./routes/glucose'));
 app.use('/api/food-analysis', require('./routes/foodAnalysis'));
 app.use('/api/meals', require('./routes/meals'));
+app.use('/api/openai', require('./routes/openai'));
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -58,6 +59,7 @@ app.get('/', (req, res) => {
       glucose: '/api/glucose',
       foodAnalysis: '/api/food-analysis',
       meals: '/api/meals',
+      openai: '/api/openai',
       health: '/health'
     }
   });

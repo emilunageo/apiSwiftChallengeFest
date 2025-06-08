@@ -1,6 +1,8 @@
 const MealEntry = require('../models/MealEntry');
 const FoodAnalysis = require('../models/FoodAnalysis');
 const Food = require('../models/Food');
+const openaiService = require('../services/openaiService');
+const OpenAIAnalysis = require('../models/OpenAIAnalysis');
 
 // @desc    Create new meal entry
 // @route   POST /api/meals
@@ -159,11 +161,24 @@ const createMealEntry = async (req, res) => {
       await mealEntry.populate('analysisId');
     }
 
+    // Trigger OpenAI analysis if requested
+    let openaiAnalysis = null;
+    if (req.body.triggerOpenAIAnalysis) {
+      try {
+        openaiAnalysis = await triggerOpenAIAnalysis(mealEntry, req.user);
+        console.log('✅ OpenAI analysis triggered successfully');
+      } catch (error) {
+        console.error('⚠️ OpenAI analysis failed but meal was saved:', error.message);
+        // Don't fail the meal creation if OpenAI analysis fails
+      }
+    }
+
     res.status(201).json({
       success: true,
       message: 'Meal entry created successfully',
       data: {
-        meal: mealEntry
+        meal: mealEntry,
+        openaiAnalysis
       }
     });
 
@@ -431,11 +446,189 @@ const deleteMealEntry = async (req, res) => {
   }
 };
 
+// @desc    Trigger OpenAI analysis for existing meal
+// @route   POST /api/meals/:id/analyze
+// @access  Public
+const analyzeMealWithOpenAI = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { baselineGlucose = 80, forceReanalysis = false, userProfile = {} } = req.body;
+
+    const meal = await MealEntry.findOne({
+      _id: id,
+      isActive: true
+    }).populate('items.foodId');
+
+    if (!meal) {
+      return res.status(404).json({
+        success: false,
+        message: 'Meal entry not found'
+      });
+    }
+
+    // Check if analysis already exists
+    if (!forceReanalysis) {
+      const existingAnalysis = await OpenAIAnalysis.findOne({
+        mealEntryId: id,
+        isActive: true
+      });
+
+      if (existingAnalysis) {
+        return res.json({
+          success: true,
+          message: 'Analysis already exists',
+          data: existingAnalysis,
+          cached: true
+        });
+      }
+    }
+
+    // Use default user profile if not provided
+    const defaultUserProfile = {
+      tipo_diabetes: 'type 2',
+      edad: 35,
+      peso: 70,
+      altura: 1.70,
+      glucosa_basal: 100
+    };
+
+    const finalUserProfile = { ...defaultUserProfile, ...userProfile };
+    const analysis = await triggerOpenAIAnalysisPublic(meal, finalUserProfile, baselineGlucose);
+
+    res.status(201).json({
+      success: true,
+      message: 'OpenAI analysis completed successfully',
+      data: analysis,
+      cached: false
+    });
+
+  } catch (error) {
+    console.error('Analyze meal with OpenAI error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error analyzing meal with OpenAI',
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+    });
+  }
+};
+
+/**
+ * Helper function to trigger OpenAI analysis for a meal (with user authentication)
+ * @param {Object} mealEntry - The meal entry to analyze
+ * @param {Object} user - The user object
+ * @param {number} baselineGlucose - Baseline glucose level
+ * @returns {Object} OpenAI analysis result
+ */
+async function triggerOpenAIAnalysis(mealEntry, user, baselineGlucose = 80) {
+  try {
+    // Prepare meal data for analysis
+    const mealData = {
+      mealType: mealEntry.mealType,
+      items: mealEntry.items.map(item => ({
+        name: item.name,
+        portion: item.portion,
+        nutritionalInfo: item.nutritionalInfo,
+        foodId: item.foodId
+      }))
+    };
+
+    // Get user profile
+    const userProfile = {
+      tipo_diabetes: user.tipo_diabetes,
+      edad: user.edad,
+      peso: user.peso,
+      altura: user.altura,
+      glucosa_basal: user.glucosa_basal
+    };
+
+    // Call OpenAI service
+    const startTime = Date.now();
+    const aiAnalysis = await openaiService.analyzeMeal(mealData, baselineGlucose, userProfile);
+    const processingTime = Date.now() - startTime;
+
+    // Save analysis to database
+    const openAIAnalysis = new OpenAIAnalysis({
+      userId: user._id,
+      mealEntryId: mealEntry._id,
+      baselineGlucose,
+      eatingOrder: aiAnalysis.eatingOrder || [],
+      glucosePrediction: aiAnalysis.glucosePrediction,
+      nutritionalEstimates: aiAnalysis.nutritionalEstimates || [],
+      recommendations: aiAnalysis.recommendations || [],
+      reasoning: aiAnalysis.reasoning,
+      metadata: {
+        ...aiAnalysis.metadata,
+        processingTime,
+        requestTimestamp: new Date()
+      }
+    });
+
+    await openAIAnalysis.save();
+    return openAIAnalysis;
+
+  } catch (error) {
+    console.error('❌ Trigger OpenAI analysis error:', error);
+    throw error;
+  }
+}
+
+/**
+ * Helper function to trigger OpenAI analysis for a meal (public access)
+ * @param {Object} mealEntry - The meal entry to analyze
+ * @param {Object} userProfile - The user profile object
+ * @param {number} baselineGlucose - Baseline glucose level
+ * @returns {Object} OpenAI analysis result
+ */
+async function triggerOpenAIAnalysisPublic(mealEntry, userProfile, baselineGlucose = 80) {
+  try {
+    // Prepare meal data for analysis
+    const mealData = {
+      mealType: mealEntry.mealType,
+      items: mealEntry.items.map(item => ({
+        name: item.name,
+        portion: item.portion,
+        nutritionalInfo: item.nutritionalInfo,
+        foodId: item.foodId
+      }))
+    };
+
+    // Call OpenAI service
+    const startTime = Date.now();
+    const aiAnalysis = await openaiService.analyzeMeal(mealData, baselineGlucose, userProfile);
+    const processingTime = Date.now() - startTime;
+
+    // Save analysis to database (without userId for public access)
+    const openAIAnalysis = new OpenAIAnalysis({
+      userId: null, // No user association for public access
+      mealEntryId: mealEntry._id,
+      baselineGlucose,
+      eatingOrder: aiAnalysis.eatingOrder || [],
+      glucosePrediction: aiAnalysis.glucosePrediction,
+      nutritionalEstimates: aiAnalysis.nutritionalEstimates || [],
+      recommendations: aiAnalysis.recommendations || [],
+      reasoning: aiAnalysis.reasoning,
+      metadata: {
+        ...aiAnalysis.metadata,
+        processingTime,
+        requestTimestamp: new Date()
+      }
+    });
+
+    await openAIAnalysis.save();
+    return openAIAnalysis;
+
+  } catch (error) {
+    console.error('❌ Trigger OpenAI analysis error:', error);
+    throw error;
+  }
+}
+
 module.exports = {
   createMealEntry,
   getMealEntries,
   getMealEntry,
   updateMealEntry,
   addGlucoseToMeal,
-  deleteMealEntry
+  deleteMealEntry,
+  analyzeMealWithOpenAI
 };
