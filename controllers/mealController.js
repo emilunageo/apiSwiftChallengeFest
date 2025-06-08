@@ -7,6 +7,9 @@ const Food = require('../models/Food');
 // @access  Private
 const createMealEntry = async (req, res) => {
   try {
+    console.log('🍽️ Creating meal entry...');
+    console.log('📥 Request body:', JSON.stringify(req.body, null, 2));
+
     const {
       mealType,
       items,
@@ -135,6 +138,17 @@ const createMealEntry = async (req, res) => {
       mood,
       symptoms,
       tags
+    });
+
+    console.log('💾 Saving meal entry with data:', {
+      mealType,
+      itemsCount: populatedItems.length,
+      nutritionalTotals,
+      items: populatedItems.map(item => ({
+        name: item.name,
+        foodId: item.foodId,
+        hasNutritionalInfo: !!item.nutritionalInfo
+      }))
     });
 
     await mealEntry.save();

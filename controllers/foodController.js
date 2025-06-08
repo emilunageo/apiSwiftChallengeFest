@@ -18,13 +18,33 @@ const getFoods = async (req, res) => {
     // Build query
     const query = { isActive: true };
 
-    // Search by name - use both text search and regex for better matching
+    // Search by name - try text search first, fallback to regex
     if (search) {
       console.log(`🔍 Searching for food: "${search}"`);
-      query.$or = [
-        { $text: { $search: search } },
-        { nombre: { $regex: search, $options: 'i' } }
-      ];
+      // Try text search first
+      try {
+        const textResults = await Food.find({ $text: { $search: search } }).limit(limitNum);
+        if (textResults.length > 0) {
+          console.log(`✅ Found ${textResults.length} results with text search`);
+          return res.json({
+            success: true,
+            data: {
+              foods: textResults,
+              pagination: {
+                current_page: pageNum,
+                total_pages: 1,
+                total_items: textResults.length,
+                items_per_page: limitNum
+              }
+            }
+          });
+        }
+      } catch (textError) {
+        console.log(`⚠️ Text search failed, falling back to regex: ${textError.message}`);
+      }
+
+      // Fallback to regex search
+      query.nombre = { $regex: search, $options: 'i' };
     }
 
     // Filter by type
