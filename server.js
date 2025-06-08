@@ -29,6 +29,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/users', require('./routes/users'));
 app.use('/api/foods', require('./routes/foods'));
+app.use('/api/messages', require('./routes/messages'));
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -50,6 +51,7 @@ app.get('/', (req, res) => {
       auth: '/api/auth',
       users: '/api/users',
       foods: '/api/foods',
+      messages: '/api/messages',
       health: '/health'
     }
   });
