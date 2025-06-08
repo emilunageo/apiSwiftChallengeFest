@@ -43,9 +43,22 @@ const createMealEntry = async (req, res) => {
         }
 
         if (item.foodId) {
+          console.log(`🔍 Looking up food with ID: ${item.foodId}`);
           const food = await Food.findById(item.foodId);
           if (food) {
+            console.log(`✅ Found food: ${food.nombre}`);
+            console.log(`📊 Food data:`, {
+              calorias_por_100g: food.calorias_por_100g,
+              carbohidratos_totales: food.carbohidratos_totales,
+              proteinas: food.proteinas,
+              grasas: food.grasas,
+              fibra: food.fibra,
+              indice_glucemico: food.indice_glucemico
+            });
+
             const portionMultiplier = (item.portion?.amount || 100) / 100; // Assuming base is per 100g
+            console.log(`🥄 Portion multiplier: ${portionMultiplier} (${item.portion?.amount || 100}g)`);
+
             item.nutritionalInfo = {
               calories: Math.round((food.calorias_por_100g || 0) * portionMultiplier),
               carbohydrates: Math.round((food.carbohidratos_totales || 0) * portionMultiplier),
@@ -55,17 +68,61 @@ const createMealEntry = async (req, res) => {
               glycemicIndex: food.indice_glucemico,
               glycemicLoad: Math.round((food.carga_glucemica || 0) * portionMultiplier)
             };
+
+            console.log(`📈 Calculated nutritional info:`, item.nutritionalInfo);
+          } else {
+            console.log(`❌ Food not found for ID: ${item.foodId}`);
           }
+        } else {
+          console.log(`⚠️ No foodId provided for item: ${item.name}`);
         }
         return item;
       })
     );
+
+    // Calculate nutritional totals
+    const nutritionalTotals = populatedItems.reduce((totals, item) => {
+      if (item.nutritionalInfo) {
+        totals.calories += item.nutritionalInfo.calories || 0;
+        totals.carbohydrates += item.nutritionalInfo.carbohydrates || 0;
+        totals.protein += item.nutritionalInfo.protein || 0;
+        totals.fat += item.nutritionalInfo.fat || 0;
+        totals.fiber += item.nutritionalInfo.fiber || 0;
+
+        // Calculate average glycemic index (weighted by carbs)
+        if (item.nutritionalInfo.glycemicIndex && item.nutritionalInfo.carbohydrates > 0) {
+          totals.totalGlycemicLoad += (item.nutritionalInfo.glycemicIndex * item.nutritionalInfo.carbohydrates);
+          totals.totalCarbs += item.nutritionalInfo.carbohydrates;
+        }
+      }
+      return totals;
+    }, {
+      calories: 0,
+      carbohydrates: 0,
+      protein: 0,
+      fat: 0,
+      fiber: 0,
+      totalGlycemicLoad: 0,
+      totalCarbs: 0
+    });
+
+    // Calculate estimated glycemic load
+    nutritionalTotals.estimatedGlycemicLoad = nutritionalTotals.totalCarbs > 0
+      ? Math.round(nutritionalTotals.totalGlycemicLoad / nutritionalTotals.totalCarbs)
+      : 0;
+
+    // Remove helper properties
+    delete nutritionalTotals.totalGlycemicLoad;
+    delete nutritionalTotals.totalCarbs;
+
+    console.log(`📊 Calculated nutritional totals:`, nutritionalTotals);
 
     // Create meal entry
     const mealEntry = new MealEntry({
       userId: req.user._id,
       mealType,
       items: populatedItems,
+      nutritionalTotals,
       photos,
       location,
       timing: {

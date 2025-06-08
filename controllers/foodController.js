@@ -18,9 +18,13 @@ const getFoods = async (req, res) => {
     // Build query
     const query = { isActive: true };
 
-    // Search by name
+    // Search by name - use both text search and regex for better matching
     if (search) {
-      query.$text = { $search: search };
+      console.log(`🔍 Searching for food: "${search}"`);
+      query.$or = [
+        { $text: { $search: search } },
+        { nombre: { $regex: search, $options: 'i' } }
+      ];
     }
 
     // Filter by type
@@ -51,6 +55,11 @@ const getFoods = async (req, res) => {
 
     // Get total count for pagination
     const total = await Food.countDocuments(query);
+
+    console.log(`📊 Found ${foods.length} foods (total: ${total}) for query:`, query);
+    if (search && foods.length > 0) {
+      console.log(`✅ First result: ${foods[0].nombre}`);
+    }
 
     res.json({
       success: true,
