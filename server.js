@@ -30,6 +30,9 @@ app.use('/api/auth', require('./routes/auth'));
 app.use('/api/users', require('./routes/users'));
 app.use('/api/foods', require('./routes/foods'));
 app.use('/api/messages', require('./routes/messages'));
+app.use('/api/glucose', require('./routes/glucose'));
+app.use('/api/food-analysis', require('./routes/foodAnalysis'));
+app.use('/api/meals', require('./routes/meals'));
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -52,6 +55,9 @@ app.get('/', (req, res) => {
       users: '/api/users',
       foods: '/api/foods',
       messages: '/api/messages',
+      glucose: '/api/glucose',
+      foodAnalysis: '/api/food-analysis',
+      meals: '/api/meals',
       health: '/health'
     }
   });
